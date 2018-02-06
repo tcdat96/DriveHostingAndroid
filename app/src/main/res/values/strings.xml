@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">HostDriveDemo</string>
+    <string name="query_failed">Problem while retrieving files.</string>
+    <string name="add_demo">Add demo</string>
+</resources>
