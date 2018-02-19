@@ -27,6 +27,7 @@ import com.google.android.gms.drive.DriveResourceClient;
 import com.google.android.gms.tasks.Task;
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
+import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
 import com.google.api.client.http.FileContent;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.drive.Drive;
@@ -177,10 +178,14 @@ public class MainActivity extends AppCompatActivity {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
-                String fileId = DriveApiUtils.getFileId(mService, mSharedFolderId, fileName);
-                if (!fileId.isEmpty()) {
-                    String content = DriveApiUtils.readFileContent(mService, fileId);
-                    Utils.showOkDialog(MainActivity.this, fileName, content);
+                try {
+                    String fileId = DriveApiUtils.getFileId(mService, mSharedFolderId, fileName);
+                    if (!fileId.isEmpty()) {
+                        String content = DriveApiUtils.readFileContent(mService, fileId);
+                        Utils.showOkDialog(MainActivity.this, fileName, content);
+                    }
+                } catch (UserRecoverableAuthIOException e) {
+                    startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
                 }
             }
         });
@@ -190,18 +195,24 @@ public class MainActivity extends AppCompatActivity {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
-                mSharedFolderId = DriveApiUtils.getSharedWithMeFolder(
-                        mService, mCredential.getSelectedAccountName());
-                final String[] nameList = DriveApiUtils.getSharedWithMeFileList(mService, mSharedFolderId);
+                try {
+                    mSharedFolderId = DriveApiUtils.getSharedWithMeFolder(
+                            mService, mCredential.getSelectedAccountName());
+                    final String[] nameList = DriveApiUtils.getSharedWithMeFileList(mService, mSharedFolderId);
 
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        mNameList.clear();
-                        mNameList.addAll(Arrays.asList(nameList));
-                        mAdapter.notifyDataSetChanged();
+                    if (nameList != null) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                mNameList.clear();
+                                mNameList.addAll(Arrays.asList(nameList));
+                                mAdapter.notifyDataSetChanged();
+                            }
+                        });
                     }
-                });
+                } catch (UserRecoverableAuthIOException e) {
+                    startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
+                }
             }
         });
     }
@@ -230,7 +241,10 @@ public class MainActivity extends AppCompatActivity {
                         mAdapter.notifyDataSetChanged();
                     }
                 });
-            } catch (IOException e) {
+            } catch (UserRecoverableAuthIOException e) {
+                startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
+            }
+            catch (IOException e) {
                 e.printStackTrace();
             }
         }

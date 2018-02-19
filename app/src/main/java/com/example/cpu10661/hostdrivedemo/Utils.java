@@ -1,7 +1,9 @@
 package com.example.cpu10661.hostdrivedemo;
 
 import android.content.Context;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AlertDialog;
+import android.util.Log;
 
 import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
 import com.google.api.services.drive.Drive;
@@ -17,8 +19,12 @@ import java.util.Date;
 import java.util.Locale;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+
+import static android.content.ContentValues.TAG;
 
 class Utils {
+    @Nonnull
     static String getCurrentTimestamp() {
         return new SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault()).format(new Date());
     }
@@ -38,13 +44,15 @@ class Utils {
          * @return the destination folder ID
          */
         @Nonnull
-        static String getSharedWithMeFolder(Drive service, String email) {
+        static String getSharedWithMeFolder(Drive service, String email) throws UserRecoverableAuthIOException {
             String folderId = "";
             FileList fileList = getFileList(service, "sharedWithMe = true");
-            for (File file : fileList.getFiles()){
-                if (file.getName().equals(email)) {
-                    folderId = file.getId();
-                    break;
+            if (fileList != null) {
+                for (File file : fileList.getFiles()) {
+                    if (file.getName().equals(email)) {
+                        folderId = file.getId();
+                        break;
+                    }
                 }
             }
             return folderId;
@@ -56,20 +64,24 @@ class Utils {
          * @param folderId the specified folder's ID
          * @return a list of specified folder's children files
          */
-        static String[] getSharedWithMeFileList(Drive service, String folderId) {
+        @Nullable
+        static String[] getSharedWithMeFileList(Drive service, String folderId) throws UserRecoverableAuthIOException {
             String q = String.format("'%s' in parents", folderId);
             FileList fileList = getFileList(service, q);
 
-            int totalFiles = fileList.getFiles().size();
-            String[] nameList = new String[totalFiles];
-            for (int i = 0; i < totalFiles; i++) {
-                nameList[i] = fileList.getFiles().get(i).getName();
+            String[] nameList = null;
+            if (fileList != null) {
+                int totalFiles = fileList.getFiles().size();
+                nameList = new String[totalFiles];
+                for (int i = 0; i < totalFiles; i++) {
+                    nameList[i] = fileList.getFiles().get(i).getName();
+                }
             }
             return nameList;
         }
 
         @Nonnull
-        static String getFileId(Drive service, String folderId, String fileName) {
+        static String getFileId(Drive service, String folderId, String fileName) throws UserRecoverableAuthIOException  {
             String q = String.format("'%s' in parents and name='%s'", folderId, fileName);
             FileList fileList = getFileList(service, q);
             if (fileList != null && !fileList.getFiles().isEmpty()) {
@@ -85,7 +97,8 @@ class Utils {
          * @param q query string
          * @return FileList result of specified query string
          */
-        private static FileList getFileList(Drive service, String q) {
+        @Nullable
+        private static FileList getFileList(Drive service, String q) throws UserRecoverableAuthIOException {
             FileList fileList = null;
             try {
                 Drive.Files.List list = service.files().list().setSpaces("drive");
@@ -93,15 +106,16 @@ class Utils {
                     list.setQ(q);
                 }
                 fileList = list.execute();
-            } catch (final UserRecoverableAuthIOException e) {
-                e.printStackTrace();
+            } catch (UserRecoverableAuthIOException e) {
+                throw e;
             } catch (IOException e) {
                 e.printStackTrace();
             }
             return fileList;
         }
 
-        static String readFileContent(Drive service, String fileId) {
+        @Nullable
+        static String readFileContent(Drive service, @NonNull String fileId) {
             try {
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                 service.files().get(fileId).executeMediaAndDownloadTo(outputStream);
@@ -113,7 +127,8 @@ class Utils {
             return null;
         }
 
-        private static String convertInputStreamToString(InputStream inputStream) {
+        @Nullable
+        private static String convertInputStreamToString(@Nonnull InputStream inputStream) {
             try {
                 ByteArrayOutputStream result = new ByteArrayOutputStream();
                 byte[] buffer = new byte[1024];
