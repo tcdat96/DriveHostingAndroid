@@ -2,15 +2,11 @@ package com.example.cpu10661.hostdrivedemo;
 
 import android.accounts.Account;
 import android.app.Activity;
-import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
-import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.support.annotation.Nullable;
-import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -120,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
     /**
      * Starts the sign-in process and initializes the Drive client.
      */
-    protected void signIn() {
+    private void signIn() {
         Set<Scope> requiredScopes = new HashSet<>(2);
         requiredScopes.add(SCOPE_FILE);
         requiredScopes.add(SCOPE_APPFOLDER);
@@ -273,7 +269,7 @@ public class MainActivity extends AppCompatActivity {
             case REQUEST_CODE_SIGN_IN:
                 if (resultCode != RESULT_OK) {
                     Log.e(TAG, "Sign-in failed.");
-                    finish();
+                    Toast.makeText(this, "Sign in failed", Toast.LENGTH_SHORT).show();
                     return;
                 }
 

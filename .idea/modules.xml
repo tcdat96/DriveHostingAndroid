@@ -2,7 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/HostDriveDemo.iml" filepath="$PROJECT_DIR$/HostDriveDemo.iml" />
+      <module fileurl="file://$PROJECT_DIR$/DriveHostingAndroid.iml" filepath="$PROJECT_DIR$/DriveHostingAndroid.iml" />
+      <module fileurl="file://D:\Work\VNG\DriveHostingAndroid\HostDriveDemo.iml" filepath="D:\Work\VNG\DriveHostingAndroid\HostDriveDemo.iml" />
       <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
     </modules>
   </component>

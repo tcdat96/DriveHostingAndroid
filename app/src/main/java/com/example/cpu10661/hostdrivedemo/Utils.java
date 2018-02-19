@@ -1,8 +1,6 @@
 package com.example.cpu10661.hostdrivedemo;
 
 import android.content.Context;
-import android.os.Build;
-import android.support.annotation.Nullable;
 import android.support.v7.app.AlertDialog;
 
 import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
@@ -26,15 +24,10 @@ class Utils {
     }
 
     static void showOkDialog(Context context, String title, String message) {
-        AlertDialog.Builder builder;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            builder = new AlertDialog.Builder(context, android.R.style.Theme_Material_Dialog_Alert);
-        } else {
-            builder = new AlertDialog.Builder(context);
-        }
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle(title)
                 .setMessage(message)
-                .setNeutralButton(android.R.string.ok, null)
+                .setPositiveButton(android.R.string.ok, null)
                 .show();
     }
 
