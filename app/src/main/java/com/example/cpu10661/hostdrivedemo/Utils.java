@@ -3,9 +3,10 @@ package com.example.cpu10661.hostdrivedemo;
 import android.content.Context;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AlertDialog;
-import android.util.Log;
 
 import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
+import com.google.api.client.http.FileContent;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.model.File;
 import com.google.api.services.drive.model.FileList;
@@ -16,22 +17,22 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
-import java.util.List;
 import java.util.Locale;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import static android.content.ContentValues.TAG;
 
+@SuppressWarnings("WeakerAccess")
 class Utils {
     @Nonnull
-    static String getCurrentTimestamp() {
+    public static String getCurrentTimestamp() {
         return new SimpleDateFormat("dd-MM-yyyy HH:mm:ss", Locale.getDefault()).format(new Date());
     }
 
-    static void showOkDialog(Context context, String title, String message) {
+    public static void showOkDialog(Context context, String title, String message) {
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle(title)
                 .setMessage(message)
@@ -46,7 +47,8 @@ class Utils {
          * @return the destination folder ID
          */
         @Nonnull
-        static String getSharedWithMeFolder(Drive service, String email) throws UserRecoverableAuthIOException {
+        public static String getSharedWithMeFolder(Drive service, String email)
+                throws UserRecoverableAuthIOException, GoogleJsonResponseException {
             String folderId = "";
             FileList fileList = getFileList(service, "sharedWithMe = true");
             if (fileList != null) {
@@ -67,7 +69,8 @@ class Utils {
          * @return a list of specified folder's children files
          */
         @Nonnull
-        static ArrayList<String> getSharedWithMeFileList(Drive service, String folderId) throws UserRecoverableAuthIOException {
+        public static ArrayList<String> getSharedWithMeFileList(Drive service, String folderId)
+                throws UserRecoverableAuthIOException, GoogleJsonResponseException {
             String q = String.format("'%s' in parents", folderId);
             FileList fileList = getFileList(service, q);
 
@@ -84,7 +87,8 @@ class Utils {
         }
 
         @Nonnull
-        static String getFileId(Drive service, String folderId, String fileName) throws UserRecoverableAuthIOException  {
+        public static String getFileId(Drive service, String folderId, String fileName)
+                throws UserRecoverableAuthIOException, GoogleJsonResponseException {
             String q = String.format("'%s' in parents and name='%s'", folderId, fileName);
             FileList fileList = getFileList(service, q);
             if (fileList != null && !fileList.getFiles().isEmpty()) {
@@ -100,7 +104,8 @@ class Utils {
          * @return FileList result of specified query string
          */
         @Nullable
-        private static FileList getFileList(Drive service, String q) throws UserRecoverableAuthIOException {
+        private static FileList getFileList(Drive service, String q)
+                throws UserRecoverableAuthIOException, GoogleJsonResponseException {
             FileList fileList = null;
             try {
                 Drive.Files.List list = service.files().list().setSpaces("drive");
@@ -110,6 +115,8 @@ class Utils {
                 fileList = list.execute();
             } catch (UserRecoverableAuthIOException e) {
                 throw e;
+            } catch (GoogleJsonResponseException e) {
+                throw e;
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -117,7 +124,7 @@ class Utils {
         }
 
         @Nullable
-        static String readFileContent(Drive service, @NonNull String fileId) {
+        public static String readFileContent(Drive service, @NonNull String fileId) {
             try {
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
                 service.files().get(fileId).executeMediaAndDownloadTo(outputStream);
@@ -139,6 +146,27 @@ class Utils {
                     result.write(buffer, 0, length);
                 }
                 return result.toString("UTF-8");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+
+        @Nullable
+        public static File createNewFile(Drive service, @Nonnull String folderId, @Nonnull java.io.File file)
+                throws UserRecoverableAuthIOException, GoogleJsonResponseException {
+            File fileMetadata = new File();
+            fileMetadata.setName(file.getName());
+            fileMetadata.setParents(Collections.singletonList(folderId));
+            FileContent mediaContent = new FileContent("text/plain", file);
+            try {
+                return service.files().create(fileMetadata, mediaContent)
+                        .setFields("id, parents")
+                        .execute();
+            } catch (UserRecoverableAuthIOException e) {
+                throw e;
+            } catch (GoogleJsonResponseException e) {
+                throw e;
             } catch (IOException e) {
                 e.printStackTrace();
             }

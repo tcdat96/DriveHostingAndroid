@@ -24,33 +24,26 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
-import com.google.android.gms.common.api.Scope;
 import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.Task;
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
 import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
-import com.google.api.client.http.FileContent;
 import com.google.api.client.json.gson.GsonFactory;
+import com.google.api.client.util.ExponentialBackOff;
 import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Locale;
 
 import com.example.cpu10661.hostdrivedemo.Utils.DriveApiUtils;
 
 import javax.annotation.Nonnull;
-
-import static com.google.android.gms.drive.Drive.SCOPE_APPFOLDER;
-import static com.google.android.gms.drive.Drive.SCOPE_FILE;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -78,9 +71,6 @@ public class MainActivity extends AppCompatActivity {
         mHandler = new Handler(handlerThread.getLooper());
 
         initUiComponents();
-
-        mCredential = GoogleAccountCredential.usingOAuth2(this,
-                Collections.singletonList(DriveScopes.DRIVE));
     }
 
     private void initUiComponents() {
@@ -89,12 +79,16 @@ public class MainActivity extends AppCompatActivity {
         addDemoButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        saveDemoFile();
-                    }
-                });
+                saveDemoFileAsync();
+            }
+        });
+
+        // add demo button
+        Button refreshButton = findViewById(R.id.btn_refresh);
+        refreshButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showSharedWithMeFileListAsync();
             }
         });
 
@@ -108,7 +102,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 final String fileName = mNameList.get(position);
-                showFileContent(fileName);
+                showFileContentAsync(fileName);
             }
         });
     }
@@ -142,11 +136,8 @@ public class MainActivity extends AppCompatActivity {
      * Starts the sign-in process and initializes the Drive client.
      */
     private void signIn() {
-        Set<Scope> requiredScopes = new HashSet<>(2);
-        requiredScopes.add(SCOPE_FILE);
-        requiredScopes.add(SCOPE_APPFOLDER);
         GoogleSignInAccount signInAccount = GoogleSignIn.getLastSignedInAccount(this);
-        if (signInAccount != null && signInAccount.getGrantedScopes().containsAll(requiredScopes)) {
+        if (signInAccount != null) {
             initializeDriveClient(signInAccount);
         } else {
             chooseNewAccount();
@@ -184,10 +175,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private GoogleSignInClient getGoogleSignInClient() {
+//        Scope driveScope = new Scope("https://www.googleapis.com/auth/drive");
         GoogleSignInOptions signInOptions =
                 new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                        .requestScopes(SCOPE_FILE)
-                        .requestScopes(SCOPE_APPFOLDER)
                         .requestEmail()
                         .build();
         return GoogleSignIn.getClient(this, signInOptions);
@@ -199,7 +189,8 @@ public class MainActivity extends AppCompatActivity {
      */
     private void initializeDriveClient(GoogleSignInAccount signInAccount) {
         mCredential = GoogleAccountCredential.usingOAuth2(this,
-                Collections.singletonList(DriveScopes.DRIVE));
+                Collections.singletonList(DriveScopes.DRIVE))
+                .setBackOff(new ExponentialBackOff());
         if (signInAccount.getAccount() != null) {
             String name = signInAccount.getAccount().name;
             String type = signInAccount.getAccount().type;
@@ -217,7 +208,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void onDriveClientReady() {
-        showSharedWithMeFileList();
+        showSharedWithMeFileListAsync();
     }
 
     /**
@@ -226,7 +217,7 @@ public class MainActivity extends AppCompatActivity {
      *
      * @param fileName name of specified file
      */
-    private void showFileContent(final String fileName) {
+    private void showFileContentAsync(final String fileName) {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
@@ -236,20 +227,20 @@ public class MainActivity extends AppCompatActivity {
                         String content = DriveApiUtils.readFileContent(mService, fileId);
                         Utils.showOkDialog(MainActivity.this, fileName, content);
                     }
-                } catch (UserRecoverableAuthIOException e) {
-                    startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
+                } catch (Exception e) {
+                    handleDriveException(e);
                 }
             }
         });
     }
 
-    private void showSharedWithMeFileList() {
+    private void showSharedWithMeFileListAsync() {
         mHandler.post(new Runnable() {
             @Override
             public void run() {
                 try {
-                    mSharedFolderId = DriveApiUtils.getSharedWithMeFolder(
-                            mService, mCredential.getSelectedAccountName());
+                    String accountName = mCredential != null ? mCredential.getSelectedAccountName() : "";
+                    mSharedFolderId = DriveApiUtils.getSharedWithMeFolder(mService, accountName);
                     final ArrayList<String> nameList =
                             DriveApiUtils.getSharedWithMeFileList(mService, mSharedFolderId);
 
@@ -261,53 +252,62 @@ public class MainActivity extends AppCompatActivity {
                             mAdapter.notifyDataSetChanged();
                         }
                     });
-                } catch (UserRecoverableAuthIOException e) {
-                    startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
+                } catch (Exception e) {
+                    handleDriveException(e);
                 }
             }
         });
     }
 
-    /**
-     * this method is synchronous and must be called in background thread
-     */
-    private void saveDemoFile() {
-        final String fileName = Utils.getCurrentTimestamp();
-        java.io.File demoFile = createDemoFile(fileName);
+    private void saveDemoFileAsync() {
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                final java.io.File demoFile = createLocalFile(Utils.getCurrentTimestamp());
+                if (demoFile != null) {
+                    try {
+                        File file = DriveApiUtils.createNewFile(mService, mSharedFolderId, demoFile);
+                        if (file != null) {
+                            Log.d(TAG, "saveDemoFileAsync: " + file.getId());
+                        }
 
-        if (demoFile != null) {
-            File fileMetadata = new File();
-            fileMetadata.setName(fileName);
-            fileMetadata.setParents(Collections.singletonList(mSharedFolderId));
-            FileContent mediaContent = new FileContent("text/plain", demoFile);
-            try {
-                final File file = mService.files().create(fileMetadata, mediaContent)
-                        .setFields("id, parents")
-                        .execute();
-                Log.d(TAG, "saveDemoFile: " + file.getId());
-
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        mNameList.add(fileName);
-                        mAdapter.notifyDataSetChanged();
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                mNameList.add(demoFile.getName());
+                                mAdapter.notifyDataSetChanged();
+                            }
+                        });
+                    } catch (Exception e) {
+                        handleDriveException(e);
                     }
-                });
-            } catch (UserRecoverableAuthIOException e) {
-                startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
-            } catch (GoogleJsonResponseException e) {
-                String message = String.format("%s %s: %s", e.getDetails().getCode(),
-                        e.getStatusMessage(), e.getDetails().getMessage());
-                Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
+                }
             }
+        });
+    }
+
+    private void handleDriveException(Exception exception) {
+        if (exception instanceof UserRecoverableAuthIOException) {
+            UserRecoverableAuthIOException e = (UserRecoverableAuthIOException) exception;
+            startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
+        } else if (exception instanceof GoogleJsonResponseException) {
+            GoogleJsonResponseException e = (GoogleJsonResponseException) exception;
+            String message = String.format(Locale.getDefault(), "%d %s: %s", e.getStatusCode(),
+                    e.getStatusMessage(), e.getDetails().getMessage());
+            Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show();
+
+            if (e.getStatusCode() == 401) {
+                signIn();
+            }
+
+            e.printStackTrace();
+        } else {
+            exception.printStackTrace();
         }
     }
 
     @Nullable
-    private java.io.File createDemoFile(String fileName) {
+    private java.io.File createLocalFile(String fileName) {
         if (!isExternalStorageWritable()) {
             Toast.makeText(this, "External storage is not writable", Toast.LENGTH_SHORT).show();
             return null;
@@ -354,9 +354,10 @@ public class MainActivity extends AppCompatActivity {
                 break;
             case REQUEST_AUTHORIZATION:
                 if (resultCode == Activity.RESULT_OK) {
-                    showSharedWithMeFileList();
+                    onDriveClientReady();
                 } else {
-                    signIn();
+                    Toast.makeText(this, getString(R.string.require_permission), Toast.LENGTH_SHORT)
+                            .show();
                 }
                 break;
         }

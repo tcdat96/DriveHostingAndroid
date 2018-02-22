@@ -6,4 +6,6 @@
     <string name="revoke_access">Revoke access</string>
     <string name="revoke_successfully">Revoke access successfully</string>
     <string name="revoke_failed">Failed to revoke access</string>
+    <string name="require_permission">This feature requires the specified permission.</string>
+    <string name="refresh_list">Refresh</string>
 </resources>
