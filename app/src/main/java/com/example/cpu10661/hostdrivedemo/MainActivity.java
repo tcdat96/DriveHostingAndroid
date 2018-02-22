@@ -6,10 +6,13 @@ import android.content.Intent;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -22,12 +25,13 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.Scope;
-import com.google.android.gms.drive.DriveClient;
-import com.google.android.gms.drive.DriveResourceClient;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.Task;
 import com.google.api.client.extensions.android.http.AndroidHttp;
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential;
 import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException;
+import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.client.http.FileContent;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.drive.Drive;
@@ -37,12 +41,13 @@ import com.google.api.services.drive.model.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
 import com.example.cpu10661.hostdrivedemo.Utils.DriveApiUtils;
+
+import javax.annotation.Nonnull;
 
 import static com.google.android.gms.drive.Drive.SCOPE_APPFOLDER;
 import static com.google.android.gms.drive.Drive.SCOPE_FILE;
@@ -51,15 +56,12 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = MainActivity.class.getSimpleName();
 
-    private static final int REQUEST_CODE_SIGN_IN = 1;
+    private static final int REQUEST_ACCOUNT_PICKER = 1;
     private static final int REQUEST_AUTHORIZATION = 2;
 
-    // Handles high-level drive functions like sync
-    private DriveClient mDriveClient;
-    // Handle access to Drive resources/files.
-    private DriveResourceClient mDriveResourceClient;
-    private GoogleAccountCredential mCredential;
-    private Drive mService;
+    private GoogleAccountCredential mCredential = null;
+    @Nonnull
+    private Drive mService = getDriveService(null);
     private String mSharedFolderId = null;
 
     private Handler mHandler;
@@ -76,6 +78,9 @@ public class MainActivity extends AppCompatActivity {
         mHandler = new Handler(handlerThread.getLooper());
 
         initUiComponents();
+
+        mCredential = GoogleAccountCredential.usingOAuth2(this,
+                Collections.singletonList(DriveScopes.DRIVE));
     }
 
     private void initUiComponents() {
@@ -109,6 +114,25 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main_menu, menu);
+        return super.onCreateOptionsMenu(menu);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.menu_sign_out:
+                signOut();
+                break;
+            case R.id.menu_revoke_access:
+                revokeAccess();
+                break;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
     protected void onStart() {
         super.onStart();
         signIn();
@@ -125,15 +149,48 @@ public class MainActivity extends AppCompatActivity {
         if (signInAccount != null && signInAccount.getGrantedScopes().containsAll(requiredScopes)) {
             initializeDriveClient(signInAccount);
         } else {
-            GoogleSignInOptions signInOptions =
-                    new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                            .requestScopes(SCOPE_FILE)
-                            .requestScopes(SCOPE_APPFOLDER)
-                            .requestEmail()
-                            .build();
-            GoogleSignInClient googleSignInClient = GoogleSignIn.getClient(this, signInOptions);
-            startActivityForResult(googleSignInClient.getSignInIntent(), REQUEST_CODE_SIGN_IN);
+            chooseNewAccount();
         }
+    }
+
+    private void signOut() {
+        mCredential = null;
+        mService = getDriveService(null);
+
+        mNameList.clear();
+        mAdapter.notifyDataSetChanged();
+
+        chooseNewAccount();
+    }
+
+    private void chooseNewAccount() {
+        GoogleSignInClient googleSignInClient = getGoogleSignInClient();
+        googleSignInClient.signOut();
+        startActivityForResult(googleSignInClient.getSignInIntent(), REQUEST_ACCOUNT_PICKER);
+    }
+
+    private void revokeAccess() {
+        GoogleSignInClient googleSignInClient = getGoogleSignInClient();
+        googleSignInClient.revokeAccess()
+                .addOnCompleteListener(new OnCompleteListener<Void>() {
+                    @Override
+                    public void onComplete(@NonNull Task<Void> task) {
+                        Toast.makeText(MainActivity.this,
+                                getString(task.isSuccessful() ? R.string.revoke_successfully : R.string.revoke_failed),
+                                Toast.LENGTH_SHORT).show();
+                        signOut();
+                    }
+                });
+    }
+
+    private GoogleSignInClient getGoogleSignInClient() {
+        GoogleSignInOptions signInOptions =
+                new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                        .requestScopes(SCOPE_FILE)
+                        .requestScopes(SCOPE_APPFOLDER)
+                        .requestEmail()
+                        .build();
+        return GoogleSignIn.getClient(this, signInOptions);
     }
 
     /**
@@ -141,11 +198,6 @@ public class MainActivity extends AppCompatActivity {
      * user's account.
      */
     private void initializeDriveClient(GoogleSignInAccount signInAccount) {
-        mDriveClient = com.google.android.gms.drive.Drive.getDriveClient(
-                getApplicationContext(), signInAccount);
-        mDriveResourceClient = com.google.android.gms.drive.Drive.getDriveResourceClient(
-                getApplicationContext(), signInAccount);
-
         mCredential = GoogleAccountCredential.usingOAuth2(this,
                 Collections.singletonList(DriveScopes.DRIVE));
         if (signInAccount.getAccount() != null) {
@@ -198,18 +250,17 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     mSharedFolderId = DriveApiUtils.getSharedWithMeFolder(
                             mService, mCredential.getSelectedAccountName());
-                    final String[] nameList = DriveApiUtils.getSharedWithMeFileList(mService, mSharedFolderId);
+                    final ArrayList<String> nameList =
+                            DriveApiUtils.getSharedWithMeFileList(mService, mSharedFolderId);
 
-                    if (nameList != null) {
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                mNameList.clear();
-                                mNameList.addAll(Arrays.asList(nameList));
-                                mAdapter.notifyDataSetChanged();
-                            }
-                        });
-                    }
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            mNameList.clear();
+                            mNameList.addAll(nameList);
+                            mAdapter.notifyDataSetChanged();
+                        }
+                    });
                 } catch (UserRecoverableAuthIOException e) {
                     startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
                 }
@@ -233,6 +284,7 @@ public class MainActivity extends AppCompatActivity {
                 final File file = mService.files().create(fileMetadata, mediaContent)
                         .setFields("id, parents")
                         .execute();
+                Log.d(TAG, "saveDemoFile: " + file.getId());
 
                 runOnUiThread(new Runnable() {
                     @Override
@@ -243,8 +295,12 @@ public class MainActivity extends AppCompatActivity {
                 });
             } catch (UserRecoverableAuthIOException e) {
                 startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
-            }
-            catch (IOException e) {
+            } catch (GoogleJsonResponseException e) {
+                String message = String.format("%s %s: %s", e.getDetails().getCode(),
+                        e.getStatusMessage(), e.getDetails().getMessage());
+                Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+                e.printStackTrace();
+            } catch (IOException e) {
                 e.printStackTrace();
             }
         }
@@ -259,9 +315,8 @@ public class MainActivity extends AppCompatActivity {
 
         java.io.File file = new java.io.File(getExternalFilesDir(null), fileName);
         try {
-            String content = getPackageName() + "\n"
-                    + mCredential.getSelectedAccountName() + "\n"
-                    + Utils.getCurrentTimestamp();
+            String accountName = mCredential != null ? mCredential.getSelectedAccountName() : "";
+            String content = String.format("%s\n%s\n%s", getPackageName(), accountName, Utils.getCurrentTimestamp());
             FileOutputStream outputStream = new FileOutputStream(file);
             outputStream.write(content.getBytes());
             outputStream.close();
@@ -280,7 +335,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         switch (requestCode) {
-            case REQUEST_CODE_SIGN_IN:
+            case REQUEST_ACCOUNT_PICKER:
                 if (resultCode != RESULT_OK) {
                     Log.e(TAG, "Sign-in failed.");
                     Toast.makeText(this, "Sign in failed", Toast.LENGTH_SHORT).show();
@@ -295,6 +350,7 @@ public class MainActivity extends AppCompatActivity {
                     Log.e(TAG, "Sign-in failed.");
                     finish();
                 }
+
                 break;
             case REQUEST_AUTHORIZATION:
                 if (resultCode == Activity.RESULT_OK) {

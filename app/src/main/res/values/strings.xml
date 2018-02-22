@@ -2,4 +2,8 @@
     <string name="app_name">HostDriveDemo</string>
     <string name="query_failed">Problem while retrieving files.</string>
     <string name="add_demo">Add demo</string>
+    <string name="sign_out">Sign out</string>
+    <string name="revoke_access">Revoke access</string>
+    <string name="revoke_successfully">Revoke access successfully</string>
+    <string name="revoke_failed">Failed to revoke access</string>
 </resources>

@@ -15,7 +15,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 import javax.annotation.Nonnull;
@@ -26,7 +28,7 @@ import static android.content.ContentValues.TAG;
 class Utils {
     @Nonnull
     static String getCurrentTimestamp() {
-        return new SimpleDateFormat("yyyyMMddHHmmss", Locale.getDefault()).format(new Date());
+        return new SimpleDateFormat("dd-MM-yyyy HH:mm:ss", Locale.getDefault()).format(new Date());
     }
 
     static void showOkDialog(Context context, String title, String message) {
@@ -64,17 +66,18 @@ class Utils {
          * @param folderId the specified folder's ID
          * @return a list of specified folder's children files
          */
-        @Nullable
-        static String[] getSharedWithMeFileList(Drive service, String folderId) throws UserRecoverableAuthIOException {
+        @Nonnull
+        static ArrayList<String> getSharedWithMeFileList(Drive service, String folderId) throws UserRecoverableAuthIOException {
             String q = String.format("'%s' in parents", folderId);
             FileList fileList = getFileList(service, q);
 
-            String[] nameList = null;
+            ArrayList<String> nameList = new ArrayList<>();
             if (fileList != null) {
                 int totalFiles = fileList.getFiles().size();
-                nameList = new String[totalFiles];
+                nameList = new ArrayList<>(totalFiles);
                 for (int i = 0; i < totalFiles; i++) {
-                    nameList[i] = fileList.getFiles().get(i).getName();
+                    String fileName = fileList.getFiles().get(i).getName();
+                    nameList.add(fileName);
                 }
             }
             return nameList;
@@ -89,7 +92,6 @@ class Utils {
             }
             return "";
         }
-
 
         /**
          * this method is synchronous and must be called in background thread
