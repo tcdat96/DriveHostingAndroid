@@ -8,4 +8,8 @@
     <string name="revoke_failed">Failed to revoke access</string>
     <string name="require_permission">This feature requires the specified permission.</string>
     <string name="refresh_list">Refresh</string>
+    <string name="error_retrieve_data">Error retrieving data content</string>
+    <string name="upload">Upload</string>
+    <string name="update_file_successfully">Update file successfully</string>
+    <string name="update_file_failed">Failed to update file</string>
 </resources>

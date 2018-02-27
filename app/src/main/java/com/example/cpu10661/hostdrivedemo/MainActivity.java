@@ -3,7 +3,6 @@ package com.example.cpu10661.hostdrivedemo;
 import android.accounts.Account;
 import android.app.Activity;
 import android.content.Intent;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.support.annotation.NonNull;
@@ -18,6 +17,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
@@ -36,7 +36,6 @@ import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 
-import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
@@ -49,8 +48,15 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = MainActivity.class.getSimpleName();
 
-    private static final int REQUEST_ACCOUNT_PICKER = 1;
-    private static final int REQUEST_AUTHORIZATION = 2;
+    public static final String EXTRA_DATA_FILE_NAME = "extraDataFileName";
+    public static final String EXTRA_FILE_ID = "extraFileId";
+
+    private static final int RC_ACCOUNT_PICKER = 1;
+    private static final int RC_AUTHORIZATION = 2;
+    private static final int RC_EDIT_DATA = 3;
+
+    private ProgressBar mRetrieveProgressBar;
+    private ListView mFileListView;
 
     private GoogleAccountCredential mCredential = null;
     @Nonnull
@@ -74,6 +80,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initUiComponents() {
+        mRetrieveProgressBar = findViewById(R.id.pbi_retrieve_data);
+
         // add demo button
         Button addDemoButton = findViewById(R.id.btn_add_demo);
         addDemoButton.setOnClickListener(new View.OnClickListener() {
@@ -93,12 +101,12 @@ public class MainActivity extends AppCompatActivity {
         });
 
         // file list view
-        ListView nameListView = findViewById(R.id.lv_shared_with_me_files);
+        mFileListView = findViewById(R.id.lv_shared_with_me_files);
         mNameList = new ArrayList<>();
         mAdapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_list_item_1, mNameList);
-        nameListView.setAdapter(mAdapter);
-        nameListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+        mFileListView.setAdapter(mAdapter);
+        mFileListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 final String fileName = mNameList.get(position);
@@ -157,7 +165,7 @@ public class MainActivity extends AppCompatActivity {
     private void chooseNewAccount() {
         GoogleSignInClient googleSignInClient = getGoogleSignInClient();
         googleSignInClient.signOut();
-        startActivityForResult(googleSignInClient.getSignInIntent(), REQUEST_ACCOUNT_PICKER);
+        startActivityForResult(googleSignInClient.getSignInIntent(), RC_ACCOUNT_PICKER);
     }
 
     private void revokeAccess() {
@@ -211,29 +219,6 @@ public class MainActivity extends AppCompatActivity {
         showSharedWithMeFileListAsync();
     }
 
-    /**
-     * this method looked up specified file, reads its content and show it in an OK dialog
-     * this method will be executed asynchronously
-     *
-     * @param fileName name of specified file
-     */
-    private void showFileContentAsync(final String fileName) {
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    String fileId = DriveApiUtils.getFileId(mService, mSharedFolderId, fileName);
-                    if (!fileId.isEmpty()) {
-                        String content = DriveApiUtils.readFileContent(mService, fileId);
-                        Utils.showOkDialog(MainActivity.this, fileName, content);
-                    }
-                } catch (Exception e) {
-                    handleDriveException(e);
-                }
-            }
-        });
-    }
-
     private void showSharedWithMeFileListAsync() {
         mHandler.post(new Runnable() {
             @Override
@@ -252,6 +237,49 @@ public class MainActivity extends AppCompatActivity {
                             mAdapter.notifyDataSetChanged();
                         }
                     });
+                } catch (Exception e) {
+                    handleDriveException(e);
+                }
+            }
+        });
+    }
+
+    /**
+     * this method looked up specified file, reads its content and show it in an OK dialog
+     * this method will be executed asynchronously
+     *
+     * @param fileName name of specified file
+     */
+    private void showFileContentAsync(final String fileName) {
+        mRetrieveProgressBar.setVisibility(View.VISIBLE);
+        mFileListView.setEnabled(false);
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String fileId = DriveApiUtils.getFileId(mService, mSharedFolderId, fileName);
+                    if (!fileId.isEmpty()) {
+                        final String content = DriveApiUtils.readFileContent(mService, fileId);
+                        java.io.File fileContent = Utils.createExternalFileContent(
+                                MainActivity.this, fileName, content);
+                        if (fileContent != null) {
+                            Intent intent = new Intent(MainActivity.this, EditTextFileActivity.class);
+                            intent.putExtra(EXTRA_DATA_FILE_NAME, fileName);
+                            intent.putExtra(EXTRA_FILE_ID, fileId);
+                            startActivityForResult(intent, RC_EDIT_DATA);
+                        } else {
+                            Toast.makeText(MainActivity.this, R.string.error_retrieve_data,
+                                    Toast.LENGTH_SHORT).show();
+                        }
+
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                mRetrieveProgressBar.setVisibility(View.GONE);
+                                mFileListView.setEnabled(true);
+                            }
+                        });
+                    }
                 } catch (Exception e) {
                     handleDriveException(e);
                 }
@@ -289,7 +317,7 @@ public class MainActivity extends AppCompatActivity {
     private void handleDriveException(Exception exception) {
         if (exception instanceof UserRecoverableAuthIOException) {
             UserRecoverableAuthIOException e = (UserRecoverableAuthIOException) exception;
-            startActivityForResult(e.getIntent(), REQUEST_AUTHORIZATION);
+            startActivityForResult(e.getIntent(), RC_AUTHORIZATION);
         } else if (exception instanceof GoogleJsonResponseException) {
             GoogleJsonResponseException e = (GoogleJsonResponseException) exception;
             String message = String.format(Locale.getDefault(), "%d %s: %s", e.getStatusCode(),
@@ -308,34 +336,22 @@ public class MainActivity extends AppCompatActivity {
 
     @Nullable
     private java.io.File createLocalFile(String fileName) {
-        if (!isExternalStorageWritable()) {
-            Toast.makeText(this, "External storage is not writable", Toast.LENGTH_SHORT).show();
-            return null;
-        }
-
-        java.io.File file = new java.io.File(getExternalFilesDir(null), fileName);
+        java.io.File file = null;
         try {
             String accountName = mCredential != null ? mCredential.getSelectedAccountName() : "";
             String content = String.format("%s\n%s\n%s", getPackageName(), accountName, Utils.getCurrentTimestamp());
-            FileOutputStream outputStream = new FileOutputStream(file);
-            outputStream.write(content.getBytes());
-            outputStream.close();
+            file = Utils.createExternalFileContent(this, fileName, content);
         } catch (Exception e) {
             e.printStackTrace();
         }
         return file;
     }
 
-    private boolean isExternalStorageWritable() {
-        String state = Environment.getExternalStorageState();
-        return Environment.MEDIA_MOUNTED.equals(state);
-    }
-
     @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    protected void onActivityResult(final int requestCode, final int resultCode, final Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         switch (requestCode) {
-            case REQUEST_ACCOUNT_PICKER:
+            case RC_ACCOUNT_PICKER:
                 if (resultCode != RESULT_OK) {
                     Log.e(TAG, "Sign-in failed.");
                     Toast.makeText(this, "Sign in failed", Toast.LENGTH_SHORT).show();
@@ -352,13 +368,31 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 break;
-            case REQUEST_AUTHORIZATION:
+            case RC_AUTHORIZATION:
                 if (resultCode == Activity.RESULT_OK) {
                     onDriveClientReady();
                 } else {
                     Toast.makeText(this, getString(R.string.require_permission), Toast.LENGTH_SHORT)
                             .show();
                 }
+                break;
+            case RC_EDIT_DATA:
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            String fileName = data.getStringExtra(EXTRA_DATA_FILE_NAME);
+                            String fileId = data.getStringExtra(EXTRA_FILE_ID);
+                            java.io.File fileContent = new java.io.File(getExternalFilesDir(null), fileName);
+                            File file = DriveApiUtils.updateFile(mService, fileId, fileContent);
+                            Toast.makeText(MainActivity.this,
+                                    file != null ? R.string.update_file_successfully : R.string.update_file_failed,
+                                    Toast.LENGTH_SHORT).show();
+                        } catch (Exception e) {
+                            handleDriveException(e);
+                        }
+                    }
+                });
                 break;
         }
         super.onActivityResult(requestCode, resultCode, data);

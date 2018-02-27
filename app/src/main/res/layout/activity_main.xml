@@ -7,6 +7,15 @@
     android:orientation="vertical"
     tools:context="com.example.cpu10661.hostdrivedemo.MainActivity">
 
+    <ProgressBar
+        android:id="@+id/pbi_retrieve_data"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        style="@android:style/Widget.Material.Light.ProgressBar.Horizontal"
+        android:visibility="gone"
+        tools:targetApi="lollipop" />
+
     <ListView
         android:id="@+id/lv_shared_with_me_files"
         android:layout_width="match_parent"
