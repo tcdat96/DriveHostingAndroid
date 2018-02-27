@@ -12,4 +12,7 @@
     <string name="upload">Upload</string>
     <string name="update_file_successfully">Update file successfully</string>
     <string name="update_file_failed">Failed to update file</string>
+    <string name="trash_file">Trash file</string>
+    <string name="delete_file">Delete file</string>
+    <string name="unknown_host_error">Unable to resolve host www.googleapis.com. Does your phone have network access?</string>
 </resources>

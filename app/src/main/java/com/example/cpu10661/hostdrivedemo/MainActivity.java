@@ -2,11 +2,13 @@ package com.example.cpu10661.hostdrivedemo;
 
 import android.accounts.Account;
 import android.app.Activity;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -36,6 +38,7 @@ import com.google.api.services.drive.Drive;
 import com.google.api.services.drive.DriveScopes;
 import com.google.api.services.drive.model.File;
 
+import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Locale;
@@ -106,11 +109,29 @@ public class MainActivity extends AppCompatActivity {
         mAdapter = new ArrayAdapter<>(this,
                 android.R.layout.simple_list_item_1, mNameList);
         mFileListView.setAdapter(mAdapter);
+        // on item click
         mFileListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 final String fileName = mNameList.get(position);
                 showFileContentAsync(fileName);
+            }
+        });
+        // on item long click
+        final CharSequence options[] = new CharSequence[] { getString(R.string.trash_file), getString(R.string.delete_file)};
+        mFileListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+            @Override
+            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
+                final String fileName = mNameList.get(position);
+                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                builder.setItems(options, new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        deleteFileAsync(fileName, which == 1);
+                    }
+                });
+                builder.show();
+                return true;
             }
         });
     }
@@ -244,12 +265,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * this method looked up specified file, reads its content and show it in an OK dialog
-     * this method will be executed asynchronously
-     *
-     * @param fileName name of specified file
-     */
     private void showFileContentAsync(final String fileName) {
         mRetrieveProgressBar.setVisibility(View.VISIBLE);
         mFileListView.setEnabled(false);
@@ -277,6 +292,37 @@ public class MainActivity extends AppCompatActivity {
                             public void run() {
                                 mRetrieveProgressBar.setVisibility(View.GONE);
                                 mFileListView.setEnabled(true);
+                            }
+                        });
+                    }
+                } catch (Exception e) {
+                    handleDriveException(e);
+                }
+            }
+        });
+    }
+
+    private void deleteFileAsync(final String fileName, final boolean isPermanent) {
+        mRetrieveProgressBar.setVisibility(View.VISIBLE);
+        mFileListView.setEnabled(false);
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String fileId = DriveApiUtils.getFileId(mService, mSharedFolderId, fileName);
+                    if (!fileId.isEmpty()) {
+                        if (isPermanent) {
+                            DriveApiUtils.deleteFile(mService, fileId);
+                        } else {
+                            DriveApiUtils.trashFile(mService, fileId);
+                        }
+
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                mRetrieveProgressBar.setVisibility(View.GONE);
+                                mFileListView.setEnabled(true);
+                                showSharedWithMeFileListAsync();
                             }
                         });
                     }
@@ -329,6 +375,9 @@ public class MainActivity extends AppCompatActivity {
             }
 
             e.printStackTrace();
+        } else if (exception instanceof UnknownHostException) {
+            Toast.makeText(this, R.string.unknown_host_error, Toast.LENGTH_SHORT).show();
+            exception.printStackTrace();
         } else {
             exception.printStackTrace();
         }

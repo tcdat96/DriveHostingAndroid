@@ -211,5 +211,29 @@ class Utils {
             }
             return null;
         }
+
+        public static void deleteFile(Drive service, @Nonnull String fileId)
+                throws UserRecoverableAuthIOException, GoogleJsonResponseException {
+            try {
+                service.files().delete(fileId).execute();
+            } catch (UserRecoverableAuthIOException | GoogleJsonResponseException e) {
+                throw e;
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        public static void trashFile(Drive service, @Nonnull String fileId)
+                throws UserRecoverableAuthIOException, GoogleJsonResponseException {
+            try {
+                File newContent = new File();
+                newContent.setTrashed(true);
+                service.files().update(fileId, newContent).execute();
+            } catch (UserRecoverableAuthIOException | GoogleJsonResponseException e) {
+                throw e;
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
     }
 }
